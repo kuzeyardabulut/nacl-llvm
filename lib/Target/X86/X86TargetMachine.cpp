@@ -22,8 +22,6 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/Transforms/NaCl.h"
-#include "llvm/NaClABI.h"
 using namespace llvm;
 
 // @LOCALMOD-START
@@ -64,19 +62,19 @@ static std::string computeDataLayout(const Triple &TT) {
   Ret += DataLayout::getManglingComponent(TT);
   // X86 and x32 have 32 bit pointers.
   if ((TT.isArch64Bit() &&
-       (TT.getEnvironment() == Triple::GNUX32 || (TT.isOSNaCl() && !NaClDontBreakABI)  )) ||
+       (TT.getEnvironment() == Triple::GNUX32 || TT.isOSNaCl())) ||
       !TT.isArch64Bit())
     Ret += "-p:32:32";
 
   // Some ABIs align 64 bit integers and doubles to 64 bits, others to 32.
-  if (TT.isArch64Bit() || TT.isOSWindows() || (TT.isOSNaCl() && !NaClDontBreakABI) ||
+  if (TT.isArch64Bit() || TT.isOSWindows() || TT.isOSNaCl() ||
       MalignDouble) //@LOCALMOD
     Ret += "-i64:64";
   else
     Ret += "-f64:32:64";
 
   // Some ABIs align long double to 128 bits, others to 32.
-  if (TT.isOSNaCl() && !NaClDontBreakABI)
+  if (TT.isOSNaCl())
     ; // No f80
   else if (TT.isArch64Bit() || TT.isOSDarwin())
     Ret += "-f80:128";
@@ -207,9 +205,6 @@ TargetPassConfig *X86TargetMachine::createPassConfig(PassManagerBase &PM) {
 
 void X86PassConfig::addIRPasses() {
   addPass(createAtomicExpandPass(&getX86TargetMachine()));
-  if (Triple(TM->getTargetTriple()).isOSNaCl() && Triple(TM->getTargetTriple()).isArch64Bit() && NaClDontBreakABI) {
-    addPass(createClearPtrToIntTop32Pass());
-  }
 
   TargetPassConfig::addIRPasses();
 }

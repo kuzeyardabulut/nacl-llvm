@@ -430,7 +430,6 @@ bool X86NaClRewritePass::ApplyControlSFI(MachineBasicBlock &MBB,
 
   // Rewrite indirect jump/call instructions
   unsigned NewOpc = 0;
-  unsigned regNum = 0;
   switch (Opc) {
   // 32-bit
   case X86::JMP32r               : NewOpc = X86::NACL_JMP32r; break;
@@ -440,11 +439,9 @@ bool X86NaClRewritePass::ApplyControlSFI(MachineBasicBlock &MBB,
   case X86::NACL_CG_JMP64r       : NewOpc = X86::NACL_JMP64r; break;
   case X86::CALL64r              : NewOpc = X86::NACL_CALL64r; break;
   case X86::TAILJMPr64           : NewOpc = X86::NACL_JMP64r; break;
-  case X86::JMP64r				 : NewOpc = X86::NACL_JMP64r; break;
   }
-
   if (NewOpc) {
-    unsigned TargetReg = MI.getOperand(regNum).getReg();
+    unsigned TargetReg = MI.getOperand(0).getReg();
     if (Is64Bit) {
       // CALL64r, etc. take a 64-bit register as a target. However, NaCl gas
       // expects naclcall/nacljmp pseudos to have 32-bit regs as targets
@@ -606,21 +603,7 @@ bool X86NaClRewritePass::ApplyRewrites(MachineBasicBlock &MBB,
   case X86::TAILJMPd             : NewOpc = X86::JMP_4; break;
   case X86::NACL_CG_TAILJMPd64   : NewOpc = X86::JMP_4; break;
   case X86::NACL_CG_CALL64pcrel32: NewOpc = X86::NACL_CALL64d; break;
-
-  //If NACL is using 64 bit pointers, TAILJMPd64 is also chosen
-  case X86::TAILJMPd64           : NewOpc = X86::JMP_4; break;
   }
-
-  //If NACL is using 64 bit pointers, NACL_CG_CALL64pcrel32 is not selected for making calls to 64 bit locations
-  //In this case, the Inst Selection makes this a CALL64register instruction even though it has an immediate op
-  //We need to fix this
-  if(Opc == X86::CALL64r &&
-	  MI.getNumOperands() >= 1 &&
-	  (MI.getOperand(0).isGlobal() || MI.getOperand(0).isSymbol())
-  ){
-	NewOpc = X86::NACL_CALL64d;
-  }
-
   if (NewOpc) {
     BuildMI(MBB, MBBI, DL, TII->get(NewOpc))
       .addOperand(MI.getOperand(0));
@@ -630,7 +613,7 @@ bool X86NaClRewritePass::ApplyRewrites(MachineBasicBlock &MBB,
 
   // General Dynamic NaCl TLS model
   // http://code.google.com/p/nativeclient/issues/detail?id=1685
-  if (Opc == X86::NACL_CG_GD_TLS_addr64 || Opc == X86::NACL_CG_GD_TLS_addr64_sameabi) {
+  if (Opc == X86::NACL_CG_GD_TLS_addr64) {
 
     // Rewrite to:
     //   leaq $sym@TLSGD(%rip), %rdi
@@ -650,13 +633,12 @@ bool X86NaClRewritePass::ApplyRewrites(MachineBasicBlock &MBB,
 
   // Local Exec NaCl TLS Model
   if (Opc == X86::NACL_CG_LE_TLS_addr64 ||
-      Opc == X86::NACL_CG_LE_TLS_addr32 ||
-      Opc == X86::NACL_CG_LE_TLS_addr64_sameabi) {
+      Opc == X86::NACL_CG_LE_TLS_addr32) {
     unsigned CallOpc, LeaOpc, Reg;
     // Rewrite to:
     //   call __nacl_read_tp@PLT
     //   lea $sym@flag(,%reg), %reg
-    if (Opc == X86::NACL_CG_LE_TLS_addr64 || Opc == X86::NACL_CG_LE_TLS_addr64_sameabi) {
+    if (Opc == X86::NACL_CG_LE_TLS_addr64) {
       CallOpc = X86::NACL_CALL64d;
       LeaOpc = X86::LEA64r;
       Reg = X86::RAX;
@@ -680,13 +662,12 @@ bool X86NaClRewritePass::ApplyRewrites(MachineBasicBlock &MBB,
 
   // Initial Exec NaCl TLS Model
   if (Opc == X86::NACL_CG_IE_TLS_addr64 ||
-      Opc == X86::NACL_CG_IE_TLS_addr32 ||
-      Opc == X86::NACL_CG_IE_TLS_addr64_sameabi) {
+      Opc == X86::NACL_CG_IE_TLS_addr32) {
     unsigned CallOpc, AddOpc, Base, Reg;
     // Rewrite to:
     //   call __nacl_read_tp@PLT
     //   addq sym@flag(%base), %reg
-    if (Opc == X86::NACL_CG_IE_TLS_addr64 || Opc == X86::NACL_CG_IE_TLS_addr64_sameabi) {
+    if (Opc == X86::NACL_CG_IE_TLS_addr64) {
       CallOpc = X86::NACL_CALL64d;
       AddOpc = X86::ADD64rm;
       Base = X86::RIP;
@@ -775,7 +756,6 @@ bool X86NaClRewritePass::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
         ApplyControlSFI(MBB, MBBI)) {
       Modified = true;
     }
-
   }
   return Modified;
 }
